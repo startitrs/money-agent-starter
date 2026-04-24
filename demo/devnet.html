@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Money Agent — Devnet USDC Demo</title>
+    <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0f; color: #e0e0e0;
+            min-height: 100vh; display: flex; justify-content: center; padding: 40px 20px;
+        }
+        .container { max-width: 720px; width: 100%; }
+        h1 { font-size: 1.8rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 6px; }
+        .subtitle span { color: #00dc82; }
+        .status { font-size: 0.8rem; margin-bottom: 28px; }
+        .status .ok { color: #00dc82; }
+        .status .err { color: #ff6b6b; }
+        .status .warn { color: #ffd700; }
+
+        .config {
+            background: #141420; border: 1px solid #2a2a3a; border-radius: 12px;
+            padding: 16px; margin-bottom: 24px;
+        }
+        .config label { font-size: 0.8rem; color: #888; display: block; margin-bottom: 4px; }
+        .config input {
+            width: 100%; background: #0d0d15; border: 1px solid #2a2a3a; color: #ccc;
+            padding: 8px 12px; border-radius: 8px; font-family: 'SF Mono', monospace;
+            font-size: 0.8rem;
+        }
+        .config input:focus { outline: none; border-color: #00dc82; }
+        .config .hint { font-size: 0.7rem; color: #555; margin-top: 4px; }
+
+        .wallets { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .wallet {
+            background: #141420; border: 1px solid #2a2a3a; border-radius: 12px; padding: 20px;
+        }
+        .wallet h3 {
+            font-size: 0.85rem; color: #888;
+            text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
+        }
+        .wallet .label { font-size: 0.75rem; color: #666; margin-bottom: 2px; }
+        .wallet .address {
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.7rem; color: #aaa;
+            word-break: break-all; margin-bottom: 12px; min-height: 2em;
+        }
+        .wallet .balance-row { display: flex; gap: 20px; align-items: baseline; }
+        .wallet .bal-item .bal-label { font-size: 0.65rem; color: #555; text-transform: uppercase; }
+        .wallet .bal-item .bal-value { font-size: 1.4rem; font-weight: 700; color: #444; }
+        .wallet .bal-item .bal-value.has-funds { color: #00dc82; }
+        .wallet .bal-item .bal-value.usdc { color: #555; }
+        .wallet .bal-item .bal-value.usdc.has-funds { color: #4a9eff; }
+
+        .actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+        button {
+            background: #1a1a2e; border: 1px solid #2a2a3a; color: #e0e0e0;
+            padding: 14px 20px; border-radius: 10px; font-size: 0.95rem;
+            cursor: pointer; transition: all 0.2s; text-align: left; font-family: inherit;
+        }
+        button:hover:not(:disabled) { background: #222240; border-color: #00dc82; }
+        button:disabled { opacity: 0.35; cursor: not-allowed; }
+        button.active { border-color: #00dc82; background: rgba(0, 220, 130, 0.08); }
+        button.done { border-color: #333; opacity: 0.5; }
+        button.faucet-btn { border-color: #2775ca; background: rgba(39, 117, 202, 0.08); }
+        button.faucet-btn:hover:not(:disabled) { background: rgba(39, 117, 202, 0.15); border-color: #4a9eff; }
+        .step-num {
+            display: inline-block; width: 24px; height: 24px; line-height: 24px;
+            text-align: center; background: #00dc82; color: #000;
+            border-radius: 50%; font-size: 0.75rem; font-weight: 700; margin-right: 10px;
+        }
+        .step-num.blue { background: #2775ca; color: #fff; }
+        .btn-sub { display: block; font-size: 0.75rem; color: #666; margin-top: 4px; margin-left: 34px; }
+
+        .log {
+            background: #0d0d15; border: 1px solid #1a1a2a; border-radius: 12px;
+            padding: 16px; max-height: 360px; overflow-y: auto;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; line-height: 1.7;
+        }
+        .log:empty::after { content: 'Transaction log...'; color: #444; }
+        .log-line { color: #aaa; }
+        .log-line.success { color: #00dc82; }
+        .log-line.error { color: #ff6b6b; }
+        .log-line.info { color: #4a9eff; }
+        .log-line.dim { color: #555; }
+        .log-line.link a { color: #7b68ee; text-decoration: none; }
+        .log-line.link a:hover { text-decoration: underline; }
+
+        .guide {
+            margin-top: 24px; padding: 20px;
+            background: #141420; border: 1px solid #2a2a3a;
+            border-radius: 12px; font-size: 0.85rem; color: #bbb; line-height: 1.8;
+        }
+        .guide h2 { font-size: 1rem; color: #fff; margin-bottom: 12px; }
+        .guide code {
+            color: #ccc; background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
+        }
+        .guide hr { border: none; border-top: 1px solid #2a2a3a; margin: 16px 0; }
+
+        @media (max-width: 600px) { .wallets { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Money Agent</h1>
+        <p class="subtitle">Solana <span>Devnet</span> — USDC Agent Payment Demo</p>
+        <p class="status" id="status">Connecting to devnet...</p>
+
+        <div class="config">
+            <label>Helius API Key (optional — improves airdrop reliability)</label>
+            <input type="text" id="helius-key" placeholder="paste your key from dashboard.helius.dev">
+            <div class="hint">Free signup at dashboard.helius.dev. Without it, uses the default public RPC (less reliable).</div>
+        </div>
+
+        <div class="wallets">
+            <div class="wallet">
+                <h3>Agent Wallet</h3>
+                <div class="label">Address</div>
+                <div class="address" id="agent-address">—</div>
+                <div class="balance-row">
+                    <div class="bal-item">
+                        <div class="bal-label">USDC</div>
+                        <div class="bal-value usdc" id="agent-usdc">—</div>
+                    </div>
+                    <div class="bal-item">
+                        <div class="bal-label">SOL</div>
+                        <div class="bal-value" id="agent-sol" style="font-size:1rem;color:#555">—</div>
+                    </div>
+                </div>
+            </div>
+            <div class="wallet">
+                <h3>Subcontractor Wallet</h3>
+                <div class="label">Address</div>
+                <div class="address" id="sub-address">—</div>
+                <div class="balance-row">
+                    <div class="bal-item">
+                        <div class="bal-label">USDC</div>
+                        <div class="bal-value usdc" id="sub-usdc">—</div>
+                    </div>
+                    <div class="bal-item">
+                        <div class="bal-label">SOL</div>
+                        <div class="bal-value" id="sub-sol" style="font-size:1rem;color:#555">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button id="btn-setup" onclick="setup()">
+                <span class="step-num">1</span>Generate wallets + airdrop SOL
+                <span class="btn-sub">Creates two wallets and requests devnet SOL for transaction fees</span>
+            </button>
+            <button id="btn-usdc" onclick="getUSDC()" disabled class="faucet-btn">
+                <span class="step-num blue">2</span>Get USDC from Circle faucet
+                <span class="btn-sub">Opens faucet.circle.com — paste address, select Solana, get 20 USDC. No login needed.</span>
+            </button>
+            <button id="btn-check" onclick="checkUSDC()" disabled>
+                <span class="step-num blue">3</span>I got the USDC — check balance
+            </button>
+            <button id="btn-pay" onclick="pay(5)" disabled>
+                <span class="step-num">4</span>Agent pays subcontractor — 5 USDC
+            </button>
+        </div>
+
+        <div class="log" id="log"></div>
+
+        <div class="guide">
+            <h2>What this does</h2>
+            Creates two wallets on Solana devnet (a public test network).
+            Funds the agent with real devnet USDC from Circle's faucet.
+            The agent then sends USDC to the subcontractor — a real on-chain transaction
+            you can verify on Solana Explorer.
+            <hr>
+            <strong>Local version:</strong> <a href="local.html" style="color:#7b68ee">local.html</a> — runs on a local validator, no faucets needed, instant.
+        </div>
+    </div>
+
+    <script>
+        const {
+            Connection, Keypair, PublicKey, SystemProgram,
+            Transaction, TransactionInstruction,
+            sendAndConfirmTransaction, LAMPORTS_PER_SOL
+        } = solanaWeb3;
+
+        const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+        const USDC_DECIMALS = 6;
+        const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+
+        let connection = null;
+        let agentKeypair = null;
+        let subKeypair = null;
+
+        function getConnection() {
+            const key = document.getElementById('helius-key').value.trim();
+            if (key) {
+                return new Connection('https://devnet.helius-rpc.com/?api-key=' + key, 'confirmed');
+            }
+            return new Connection('https://api.devnet.solana.com', 'confirmed');
+        }
+
+        // --- SPL helpers ---
+
+        function encodeU64LE(value) {
+            const buf = new Uint8Array(8);
+            let n = BigInt(value);
+            for (let i = 0; i < 8; i++) { buf[i] = Number(n & 0xFFn); n >>= 8n; }
+            return buf;
+        }
+
+        async function getATA(mint, owner) {
+            const [addr] = await PublicKey.findProgramAddress(
+                [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            );
+            return addr;
+        }
+
+        function createATAIx(payer, ata, owner, mint) {
+            return new TransactionInstruction({
+                keys: [
+                    { pubkey: payer, isSigner: true, isWritable: true },
+                    { pubkey: ata, isSigner: false, isWritable: true },
+                    { pubkey: owner, isSigner: false, isWritable: false },
+                    { pubkey: mint, isSigner: false, isWritable: false },
+                    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                ],
+                programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+                data: new Uint8Array([1]),
+            });
+        }
+
+        function transferCheckedIx(source, mint, dest, owner, amount, decimals) {
+            const data = new Uint8Array(10);
+            data[0] = 12;
+            data.set(encodeU64LE(amount), 1);
+            data[9] = decimals;
+            return new TransactionInstruction({
+                keys: [
+                    { pubkey: source, isSigner: false, isWritable: true },
+                    { pubkey: mint, isSigner: false, isWritable: false },
+                    { pubkey: dest, isSigner: false, isWritable: true },
+                    { pubkey: owner, isSigner: true, isWritable: false },
+                ],
+                programId: TOKEN_PROGRAM_ID,
+                data: data,
+            });
+        }
+
+        async function getTokenBalance(conn, owner) {
+            try {
+                const ata = await getATA(USDC_MINT, owner);
+                const resp = await conn.getTokenAccountBalance(ata);
+                return parseFloat(resp.value.uiAmountString);
+            } catch (e) { return 0; }
+        }
+
+        // --- UI ---
+
+        function log(msg, type) {
+            const el = document.getElementById('log');
+            const line = document.createElement('div');
+            line.className = 'log-line' + (type ? ' ' + type : '');
+            line.innerHTML = msg;
+            el.appendChild(line);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function updateBalances(conn) {
+            try {
+                if (agentKeypair) {
+                    const sol = await conn.getBalance(agentKeypair.publicKey);
+                    const el = document.getElementById('agent-sol');
+                    el.textContent = (sol / LAMPORTS_PER_SOL).toFixed(4);
+                    el.className = sol > 0 ? 'bal-value has-funds' : 'bal-value';
+
+                    const usdc = await getTokenBalance(conn, agentKeypair.publicKey);
+                    const uel = document.getElementById('agent-usdc');
+                    uel.textContent = usdc.toFixed(2) + ' USDC';
+                    uel.className = usdc > 0 ? 'bal-value usdc has-funds' : 'bal-value usdc';
+                }
+                if (subKeypair) {
+                    const sol = await conn.getBalance(subKeypair.publicKey);
+                    document.getElementById('sub-sol').textContent = (sol / LAMPORTS_PER_SOL).toFixed(4);
+
+                    const usdc = await getTokenBalance(conn, subKeypair.publicKey);
+                    const uel = document.getElementById('sub-usdc');
+                    uel.textContent = usdc.toFixed(2) + ' USDC';
+                    uel.className = usdc > 0 ? 'bal-value usdc has-funds' : 'bal-value usdc';
+                }
+            } catch (e) {}
+        }
+
+        // --- Check devnet ---
+
+        async function init() {
+            const el = document.getElementById('status');
+            try {
+                const conn = getConnection();
+                const v = await conn.getVersion();
+                const key = document.getElementById('helius-key').value.trim();
+                const via = key ? 'Helius' : 'public RPC';
+                el.innerHTML = '<span class="ok">Connected to devnet</span> via ' + via;
+            } catch (e) {
+                el.innerHTML = '<span class="err">Cannot reach devnet.</span> Check your internet connection.';
+            }
+        }
+
+        // Re-check when Helius key changes
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('helius-key').addEventListener('change', init);
+            init();
+        });
+
+        // --- Steps ---
+
+        async function setup() {
+            const btn = document.getElementById('btn-setup');
+            btn.disabled = true;
+            const conn = getConnection();
+
+            agentKeypair = Keypair.generate();
+            subKeypair = Keypair.generate();
+
+            document.getElementById('agent-address').textContent = agentKeypair.publicKey.toBase58();
+            document.getElementById('sub-address').textContent = subKeypair.publicKey.toBase58();
+            log('Wallets generated');
+            log('Agent:  ' + agentKeypair.publicKey.toBase58(), 'dim');
+            log('Subcon: ' + subKeypair.publicKey.toBase58(), 'dim');
+
+            btn.innerHTML = '<span class="step-num">1</span>Requesting SOL airdrop...';
+            log('Requesting 2 SOL from devnet...');
+
+            try {
+                const sig = await conn.requestAirdrop(agentKeypair.publicKey, 2 * LAMPORTS_PER_SOL);
+                log('Airdrop requested, confirming...');
+                await conn.confirmTransaction(sig, 'confirmed');
+                log('SOL funded: 2 SOL', 'success');
+                log('<a href="https://explorer.solana.com/tx/' + sig + '?cluster=devnet" target="_blank">View on Solana Explorer</a>', 'link');
+                await updateBalances(conn);
+
+                btn.innerHTML = '<span class="step-num">1</span>Agent has SOL — now get USDC';
+                btn.className = 'done';
+                document.getElementById('btn-usdc').disabled = false;
+            } catch (e) {
+                log('Airdrop failed: ' + e.message, 'error');
+                log('Try pasting a Helius API key above, or wait a few minutes and retry.', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<span class="step-num">1</span>Retry';
+            }
+        }
+
+        function getUSDC() {
+            const addr = agentKeypair.publicKey.toBase58();
+            navigator.clipboard.writeText(addr);
+            log('Address copied to clipboard: ' + addr, 'info');
+            log('On faucet.circle.com: paste address, select Solana, click Send 20 USDC.', 'info');
+            window.open('https://faucet.circle.com/', '_blank');
+
+            document.getElementById('btn-check').disabled = false;
+            document.getElementById('btn-check').className = 'active';
+        }
+
+        async function checkUSDC() {
+            const btn = document.getElementById('btn-check');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="step-num blue">3</span>Checking...';
+            const conn = getConnection();
+
+            const usdc = await getTokenBalance(conn, agentKeypair.publicKey);
+            await updateBalances(conn);
+
+            if (usdc > 0) {
+                log('USDC received: ' + usdc.toFixed(2) + ' USDC', 'success');
+                btn.innerHTML = '<span class="step-num blue">3</span>' + usdc.toFixed(2) + ' USDC confirmed';
+                btn.className = 'done';
+                document.getElementById('btn-usdc').disabled = true;
+                document.getElementById('btn-usdc').className = 'done';
+                document.getElementById('btn-pay').disabled = false;
+                document.getElementById('btn-pay').className = 'active';
+            } else {
+                log('No USDC yet. Go to Circle faucet, then check again.', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<span class="step-num blue">3</span>Check again';
+            }
+        }
+
+        async function pay(amount) {
+            const btn = document.getElementById('btn-pay');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="step-num">4</span>Signing transaction...';
+            const conn = getConnection();
+
+            const rawAmount = amount * Math.pow(10, USDC_DECIMALS);
+            log('Agent sending ' + amount + ' USDC to subcontractor...');
+
+            try {
+                const agentATA = await getATA(USDC_MINT, agentKeypair.publicKey);
+                const subATA = await getATA(USDC_MINT, subKeypair.publicKey);
+
+                const tx = new Transaction().add(
+                    createATAIx(agentKeypair.publicKey, subATA, subKeypair.publicKey, USDC_MINT),
+                    transferCheckedIx(agentATA, USDC_MINT, subATA, agentKeypair.publicKey, rawAmount, USDC_DECIMALS)
+                );
+
+                const sig = await sendAndConfirmTransaction(conn, tx, [agentKeypair]);
+                log('Payment confirmed: ' + amount + ' USDC', 'success');
+                log('<a href="https://explorer.solana.com/tx/' + sig + '?cluster=devnet" target="_blank">View USDC payment on Solana Explorer</a>', 'link');
+                await updateBalances(conn);
+
+                btn.innerHTML = '<span class="step-num">4</span>Paid ' + amount + ' USDC';
+                btn.className = 'done';
+                log('Agent made an autonomous USDC payment on Solana devnet.', 'success');
+                log('No human approved this transaction.', 'success');
+            } catch (e) {
+                log('Transfer failed: ' + e.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<span class="step-num">4</span>Retry';
+            }
+        }
+    </script>
+</body>
+</html>

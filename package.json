@@ -1,0 +1,14 @@
+{
+  "name": "money-agent-starter",
+  "version": "1.0.0",
+  "description": "Starter kit for building AI agents that handle money on Solana",
+  "scripts": {
+    "setup": "bash setup.sh",
+    "send": "node send.js",
+    "demo": "python3 -m http.server 3000 -d demo"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "@solana/spl-token": "^0.4.9"
+  }
+}

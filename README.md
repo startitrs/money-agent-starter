@@ -6,8 +6,9 @@ Build AI agents that handle money on Solana. This starter kit gives you everythi
 
 | File | What it does |
 |------|-------------|
-| `setup.sh` | Installs Solana, starts a local blockchain, creates a USDC token, funds your wallet. Run once. |
+| `setup.sh` | Installs Solana if needed, starts a repo-local validator in the background, creates a USDC token, funds a repo-local wallet. Run once. |
 | `send.js` | Complete example: sends 50 USDC from your wallet to a new address. Run it to see a payment happen. |
+| `send-devnet.js` | Same example on Solana devnet with real devnet USDC. Prints a Solana Explorer link you can show to judges. |
 | `pay.js` | Two functions you import into your app: `createPayer()` and `sendPayment(address, amount)`. |
 | `demo/local.html` | Visual browser demo — click buttons, watch USDC move between wallets. |
 | `demo/devnet.html` | Same demo but on Solana's public test network (requires faucet — see Devnet section below). |
@@ -22,7 +23,7 @@ git clone <this-repo>
 cd money-agent-starter
 npm install
 
-# 2. Setup (installs Solana CLI, starts local blockchain, creates USDC, funds wallet)
+# 2. Setup (starts local blockchain, creates repo-local wallet + USDC, funds wallet)
 npm run setup
 
 # 3. Send your first payment
@@ -30,6 +31,7 @@ npm run send
 ```
 
 That's it. You just sent 50 USDC on a local Solana blockchain.
+`setup.sh` writes `.wallet.json`, `.mint-address`, and `.validator.log` in the repo so the starter stays self-contained.
 
 ## How to use in your app
 
@@ -43,6 +45,11 @@ const payer = await createPayer();
 const tx = await sendPayment(payer, "RecipientSolanaAddress", 50);
 console.log("Paid! Transaction:", tx);
 ```
+
+By default, `createPayer()` uses:
+- `.wallet.json` if it exists in the current project
+- `WALLET_PATH` if you set it
+- `~/.config/solana/id.json` as a fallback
 
 Your AI agent decides when and how much to pay. The `sendPayment` function handles everything — creating accounts, signing the transaction, confirming it on-chain.
 
@@ -78,14 +85,25 @@ The transaction signature (`tx`) is cryptographic proof that the payment happene
 
 When you're ready to show real on-chain transactions:
 
-1. Change the RPC URL in your code:
+1. Point the payer at devnet and the real USDC mint:
    ```javascript
-   const payer = await createPayer({ rpcUrl: "https://api.devnet.solana.com" });
+   const payer = await createPayer({
+     rpcUrl: "https://api.devnet.solana.com",
+     mintAddress: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+   });
    ```
 
 2. Get devnet SOL (for fees): [faucet.solana.com](https://faucet.solana.com/)
 3. Get devnet USDC: [faucet.circle.com](https://faucet.circle.com/) — select Solana, paste your address
-4. Use the real USDC mint address: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
+4. Run the ready-made devnet example:
+   ```bash
+   npm run send:devnet
+   ```
+
+Optional env vars:
+```bash
+AMOUNT=7.5 RECIPIENT_ADDRESS=<wallet> npm run send:devnet
+```
 
 **Warning:** Devnet faucets have daily rate limits and can be unreliable. Develop locally, switch to devnet only for the final demo.
 
@@ -95,6 +113,7 @@ When you're ready to show real on-chain transactions:
 your-project/
 ├── pay.js              ← copy from this starter
 ├── your-agent.js       ← your AI agent code
+├── .wallet.json        ← optional repo-local wallet created by setup.sh
 ├── .mint-address       ← created by setup.sh
 └── package.json
 ```
@@ -105,15 +124,15 @@ your-project/
 Run `npm install`.
 
 **"Connection refused" or "fetch failed"**
-The local validator isn't running. Start it:
+The local validator isn't running. Start it again:
 ```bash
-solana-test-validator
+npm run setup
 ```
 
 **"Insufficient funds"**
-Airdrop more SOL:
+Airdrop more SOL to the wallet from `.wallet.json`:
 ```bash
-solana airdrop 100
+solana -C .solana-config.yml airdrop 100
 ```
 
 **"Account not found" or "could not find mint"**
@@ -121,6 +140,6 @@ You need to run `setup.sh` again (creates the token).
 
 **Want a clean start?**
 ```bash
-rm -rf test-ledger .mint-address
+rm -rf test-ledger .mint-address .wallet.json .solana-config.yml .validator.log
 npm run setup
 ```

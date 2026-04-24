@@ -10,7 +10,9 @@ This project is a hackathon starter kit for building AI agents that autonomously
 
 - `pay.js` — the only file the developer needs. Exports `createPayer()` and `sendPayment(payer, address, amount)`.
 - `send.js` — standalone example showing a complete payment. Good reference for how pay.js is used.
-- `setup.sh` — sets up the local Solana environment. Run once. Creates `.mint-address` file.
+- `send-devnet.js` — same payment flow on Solana devnet. Good for the final hackathon proof.
+- `setup.sh` — sets up the local Solana environment. Run once. Creates `.wallet.json`, `.solana-config.yml`, and `.mint-address`.
+- `.wallet.json` — repo-local wallet keypair created by setup.sh.
 - `.mint-address` — contains the local USDC token mint address. Created by setup.sh, read by pay.js.
 - `demo/local.html` — visual browser demo (local validator). Not needed for code integration.
 - `demo/devnet.html` — visual browser demo (devnet). Not needed for code integration.
@@ -20,7 +22,7 @@ This project is a hackathon starter kit for building AI agents that autonomously
 ```javascript
 const { createPayer, sendPayment } = require("./pay");
 
-// Initialize once (reads wallet from ~/.config/solana/id.json, mint from .mint-address)
+// Initialize once (reads .wallet.json if present, mint from .mint-address)
 const payer = await createPayer();
 
 // Send payment (creates recipient's token account if needed, then transfers)
@@ -33,8 +35,8 @@ const signature = await sendPayment(payer, recipientAddress, amount);
 
 ### `createPayer(options?)`
 1. Connects to Solana RPC (default: localhost:8899)
-2. Loads wallet keypair from file
-3. Loads USDC mint address from `.mint-address`
+2. Loads wallet keypair from `.wallet.json`, `WALLET_PATH`, or `~/.config/solana/id.json`
+3. Loads USDC mint address from `.mint-address` unless `mintAddress` is passed directly
 4. Reads token decimals from the mint
 5. Returns `{ connection, keypair, mint, decimals }`
 
@@ -110,11 +112,8 @@ When the developer wants real on-chain transactions visible on Solana Explorer:
 ```javascript
 const payer = await createPayer({
   rpcUrl: "https://api.devnet.solana.com",
-  mintPath: null // won't read .mint-address
+  mintAddress: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 });
-// Override mint to real devnet USDC
-payer.mint = new (require("@solana/web3.js").PublicKey)("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-payer.decimals = 6;
 ```
 
 Requirements for devnet: wallet must have SOL (from faucet.solana.com) and USDC (from faucet.circle.com).
@@ -123,8 +122,8 @@ Requirements for devnet: wallet must have SOL (from faucet.solana.com) and USDC 
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `Connection refused` | Local validator not running | Run `solana-test-validator` |
-| `Insufficient funds` | Not enough SOL for fees | `solana airdrop 100` (local) |
+| `Connection refused` | Local validator not running | Run `npm run setup` |
+| `Insufficient funds` | Not enough SOL for fees | `solana -C .solana-config.yml airdrop 100` (local) |
 | `TokenAccountNotFoundError` | Mint doesn't exist | Run `setup.sh` again |
 | `Transaction was not confirmed in 30 seconds` | Network congestion (devnet) | Retry, or switch to local |
 

@@ -3,7 +3,27 @@
 # Starts a local Solana validator, creates a USDC-like token, funds your wallet.
 # Run once. After that, use send.js to make payments.
 
-set -e
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WALLET_PATH="${WALLET_PATH:-$ROOT_DIR/.wallet.json}"
+SOLANA_CONFIG="${SOLANA_CONFIG:-$ROOT_DIR/.solana-config.yml}"
+LEDGER_DIR="${LEDGER_DIR:-$ROOT_DIR/test-ledger}"
+VALIDATOR_LOG="${VALIDATOR_LOG:-$ROOT_DIR/.validator.log}"
+RPC_URL="${RPC_URL:-http://127.0.0.1:8899}"
+
+solana_cmd() {
+    solana -C "$SOLANA_CONFIG" "$@"
+}
+
+spl_token_cmd() {
+    spl-token -C "$SOLANA_CONFIG" "$@"
+}
+
+validator_running() {
+    curl -s "$RPC_URL" -X POST -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","id":1,"method":"getVersion","params":[]}' > /dev/null
+}
 
 # Check if Solana CLI is installed
 if ! command -v solana &> /dev/null && ! [ -f "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
@@ -21,66 +41,73 @@ export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
 echo "Solana CLI: $(solana --version)"
 
-# Create wallet if it doesn't exist
-if [ ! -f "$HOME/.config/solana/id.json" ]; then
+# Create a repo-local wallet if it doesn't exist
+if [ ! -f "$WALLET_PATH" ]; then
     echo "Creating wallet..."
-    solana-keygen new --no-bip39-passphrase
+    solana-keygen new --no-bip39-passphrase --silent --force -o "$WALLET_PATH" > /dev/null
 fi
 
-# Set to localhost
-solana config set --url localhost
+# Use a repo-local Solana config so setup never depends on global CLI state
+solana config set --config "$SOLANA_CONFIG" --url localhost --keypair "$WALLET_PATH" > /dev/null
 
 # Check if validator is already running
-if curl -s http://localhost:8899 -X POST -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"getVersion","params":[]}' &> /dev/null; then
-    echo "Local validator already running."
+if validator_running; then
+    echo "Local validator already running on $RPC_URL."
 else
     echo "Starting local validator..."
-    # Clean start
-    rm -rf test-ledger
-    solana-test-validator --quiet &
+    nohup solana-test-validator --quiet --ledger "$LEDGER_DIR" --reset > "$VALIDATOR_LOG" 2>&1 &
     VALIDATOR_PID=$!
     echo "Validator PID: $VALIDATOR_PID"
 
     # Wait for it to be ready
     echo "Waiting for validator..."
     for i in $(seq 1 30); do
-        if curl -s http://localhost:8899 -X POST -H "Content-Type: application/json" \
-            -d '{"jsonrpc":"2.0","id":1,"method":"getVersion","params":[]}' &> /dev/null; then
+        if validator_running; then
             break
         fi
         sleep 1
     done
+    if ! validator_running; then
+        echo "Validator failed to start. See $VALIDATOR_LOG"
+        exit 1
+    fi
     echo "Validator ready."
 fi
 
 # Fund wallet
 echo "Funding wallet with 100 SOL..."
-solana airdrop 100
+solana_cmd airdrop 100 > /dev/null
 
 # Create token (our local USDC equivalent)
 echo "Creating USDC token (6 decimals)..."
-MINT=$(spl-token create-token --decimals 6 2>&1 | grep "Creating token" | awk '{print $3}')
+MINT=$(spl_token_cmd create-token --decimals 6 2>&1 | awk '/Creating token/ {print $3}')
+if [ -z "$MINT" ]; then
+    echo "Failed to create token."
+    exit 1
+fi
 echo "Mint address: $MINT"
 
 # Create token account
 echo "Creating token account..."
-spl-token create-account $MINT
+spl_token_cmd create-account "$MINT" > /dev/null
 
 # Mint 10,000 USDC
 echo "Minting 10,000 USDC..."
-spl-token mint $MINT 10000
+spl_token_cmd mint "$MINT" 10000 > /dev/null
 
 # Save mint address for send.js
-echo $MINT > .mint-address
+echo "$MINT" > "$ROOT_DIR/.mint-address"
 echo ""
 echo "============================================"
 echo "Setup complete!"
 echo ""
-echo "Your wallet: $(solana address)"
+echo "Wallet file: $(realpath "$WALLET_PATH")"
+echo "Your wallet: $(solana-keygen pubkey "$WALLET_PATH")"
 echo "USDC mint:   $MINT"
-echo "Balance:     $(solana balance) + 10,000 USDC"
+echo "Balance:     $(solana_cmd balance) + 10,000 USDC"
+echo "Validator:   $RPC_URL"
+echo "Log file:    $(realpath "$VALIDATOR_LOG")"
 echo ""
-echo "Next: edit send.js with a recipient address, then run:"
+echo "Next: run"
 echo "  npm run send"
 echo "============================================"

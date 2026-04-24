@@ -10,8 +10,30 @@ Build AI agents that handle money on Solana. This starter kit gives you everythi
 | `send.js` | Complete example: sends 50 USDC from your wallet to a new address. Run it to see a payment happen. |
 | `send-devnet.js` | Same example on Solana devnet with real devnet USDC. Prints a Solana Explorer link you can show to judges. |
 | `pay.js` | Two functions you import into your app: `createPayer()` and `sendPayment(address, amount)`. |
+| `examples/payment-server.js` | Tiny HTTP bridge for apps written in PHP, Python, Ruby, Go, etc. |
+| `examples/php-client.php` | Example PHP client calling the local payment bridge. |
+| `INTEGRATION.md` | Stack-agnostic setup guide for hackathon teams with little or no blockchain experience. |
 | `demo/local.html` | Visual browser demo — click buttons, watch USDC move between wallets. |
 | `demo/devnet.html` | Same demo but on Solana's public test network (requires faucet — see Devnet section below). |
+
+## If you're new and just need this to work
+
+You do **not** need to:
+- build your whole app in Node
+- learn smart contracts
+- understand Solana internals
+- touch anything beyond one payment call
+
+The simplest hackathon path is:
+
+1. Build your main app in whatever stack you already know.
+2. Use this repo only for the payment part.
+3. Run `npm run setup` once.
+4. Either:
+   - import `pay.js` directly if your app is already in Node, or
+   - start `npm run bridge` and call it from PHP / Python / Ruby / Go / anything else
+
+If your goal is "my app should show that a payment happened", this starter is enough.
 
 ## Quick start (5 minutes)
 
@@ -33,6 +55,49 @@ npm run send
 That's it. You just sent 50 USDC on a local Solana blockchain.
 `setup.sh` writes `.wallet.json`, `.mint-address`, and `.validator.log` in the repo so the starter stays self-contained.
 
+## Use this from any stack
+
+If your app is **not** in Node, do not rewrite it.
+
+Start the included local bridge:
+
+```bash
+npm run bridge
+```
+
+Then call it from your app:
+
+```bash
+curl -X POST http://127.0.0.1:3030/pay \
+  -H "Content-Type: application/json" \
+  -d '{"recipientAddress":"RECIPIENT_WALLET","amount":"5"}'
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "transaction": "TRANSACTION_SIGNATURE",
+  "recipientAddress": "RECIPIENT_WALLET",
+  "amount": "5"
+}
+```
+
+This gives you a minimal architecture:
+
+```text
+Your app (PHP / Python / Ruby / etc.)
+            |
+            v
+Local Node payment bridge
+            |
+            v
+Solana local validator or devnet
+```
+
+See [INTEGRATION.md](./INTEGRATION.md) for the full walkthrough and the PHP example.
+
 ## How to use in your app
 
 ```javascript
@@ -45,6 +110,8 @@ const payer = await createPayer();
 const tx = await sendPayment(payer, "RecipientSolanaAddress", 50);
 console.log("Paid! Transaction:", tx);
 ```
+
+If your app is not written in Node, use the bridge in `examples/payment-server.js` instead of importing `pay.js` directly.
 
 By default, `createPayer()` uses:
 - `.wallet.json` if it exists in the current project
@@ -107,16 +174,22 @@ AMOUNT=7.5 RECIPIENT_ADDRESS=<wallet> npm run send:devnet
 
 **Warning:** Devnet faucets have daily rate limits and can be unreliable. Develop locally, switch to devnet only for the final demo.
 
+If your event allows fully local demos, you can stay on the local validator the entire time and avoid faucet/RPC issues.
+
 ## Project structure for your hackathon project
 
 ```
 your-project/
-├── pay.js              ← copy from this starter
-├── your-agent.js       ← your AI agent code
-├── .wallet.json        ← optional repo-local wallet created by setup.sh
-├── .mint-address       ← created by setup.sh
-└── package.json
+├── your-app/                 ← your PHP / Python / Rails / etc. app
+├── payment-bridge/
+│   ├── pay.js                ← copy from this starter
+│   ├── examples/payment-server.js
+│   ├── .wallet.json          ← optional repo-local wallet created by setup.sh
+│   ├── .mint-address         ← created by setup.sh
+│   └── package.json
 ```
+
+If you are already in Node, you can keep everything in one project and just copy `pay.js`.
 
 ## Troubleshooting
 

@@ -6,6 +6,7 @@
     "setup": "bash setup.sh",
     "send": "node send.js",
     "send:devnet": "node send-devnet.js",
+    "bridge": "node examples/payment-server.js",
     "demo": "python3 -m http.server 3000 -d demo"
   },
   "dependencies": {
